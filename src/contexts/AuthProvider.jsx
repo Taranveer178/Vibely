@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile as updateFirebaseProfile } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../../firebase';
+import { saveNewUserProfile, syncPublicProfile } from '../services/firebaseData';
+import { uploadMedia } from '../services/storage';
 import { AuthContext } from './AuthContext';
 
 function createUserProfile(firebaseUser, profile = {}) {
@@ -36,7 +38,16 @@ export function AuthProvider({ children }) {
       try {
         const profileSnapshot = await getDoc(doc(db, 'users', firebaseUser.uid));
         if (revision !== authStateRevision) return;
-        setUser(createUserProfile(firebaseUser, profileSnapshot.exists() ? profileSnapshot.data() : {}));
+        if (profileSnapshot.data()?.status === 'suspended') {
+          setUser(null);
+          setAuthError('This account has been suspended.');
+          await signOut(auth);
+          return;
+        }
+        const profile = createUserProfile(firebaseUser, profileSnapshot.exists() ? profileSnapshot.data() : {});
+        setUser(profile);
+        await syncPublicProfile(profile);
+        if (revision !== authStateRevision) return;
         setAuthError('');
       } catch (error) {
         if (revision !== authStateRevision) return;
@@ -64,13 +75,13 @@ export function AuthProvider({ children }) {
     setAuthError('');
     const credential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
     const name = formData.name || '';
-    const avatar = formData.avatar || '';
+    const avatar = formData.avatarFile ? await uploadMedia(formData.avatarFile) : '';
     await updateFirebaseProfile(credential.user, {
       displayName: name,
       photoURL: avatar || null,
     });
     const profile = createUserProfile(credential.user, { ...formData, name, avatar });
-    await setDoc(doc(db, 'users', credential.user.uid), profile);
+    await saveNewUserProfile(profile);
     setUser(profile);
     setIsOnboarding(true);
     return profile;

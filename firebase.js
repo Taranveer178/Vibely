@@ -1,16 +1,20 @@
-import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
+import { initializeApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCq6hcgGezvfD8JaRDc_fYfVYw4T1wMSs",
-  authDomain: "vibely-1d289.firebaseapp.com",
-  projectId: "vibely-1d289",
-  storageBucket: "vibely-1d289.firebasestorage.app",
-  messagingSenderId: "660373637357",
-  appId: "1:660373637357:web:ed634904355b9d71b4e4e4"
+  apiKey: "AIzaSyCq6hcgGezvfD8JaRDc_fYfVYVw4T1wMSs",
+  authDomain: 'vibely-1d289.firebaseapp.com',
+  projectId: 'vibely-1d289',
+  storageBucket: 'vibely-1d289.firebasestorage.app',
+  messagingSenderId: '660373637357',
+  appId: '1:660373637357:web:ed634904355b9d71b4e4',
 };
+
+if (!firebaseConfig.apiKey) {
+  throw new Error('VITE_FIREBASE_API_KEY is not configured. Copy .env.example to .env.local and add your Firebase Web API key.');
+}
 
 const app = initializeApp(firebaseConfig);
 

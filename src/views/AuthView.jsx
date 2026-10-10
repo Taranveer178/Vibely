@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Activity, Image as ImageIcon, LoaderCircle, LogIn, UserPlus } from 'lucide-react';
 import { useAuth } from '../contexts/useAuth';
-import { uploadToCloudinary } from '../services/cloudinary';
 
 export function AuthView({ initialError = '' }) {
   const { login, register } = useAuth();
@@ -17,13 +16,12 @@ export function AuthView({ initialError = '' }) {
     setIsSubmitting(true);
     try {
       if (isRegistering) {
-        const avatarUrl = avatarFile ? await uploadToCloudinary(avatarFile, 'image') : '';
         await register({
           email: form.get('email'),
           name: form.get('name'),
           username: form.get('username'),
           bio: form.get('bio'),
-          avatar: avatarUrl,
+          avatarFile,
           password: form.get('password'),
         });
       } else {

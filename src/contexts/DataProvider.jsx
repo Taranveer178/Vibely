@@ -1,17 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { doc, setDoc } from 'firebase/firestore';
-import { api } from '../services/api';
-import { db } from '../../firebase';
+import {
+  addMessageReaction,
+  castPollVote,
+  createChatMessage,
+  createCircle as createFirestoreCircle,
+  createMoment as createFirestoreMoment,
+  createStory as createFirestoreStory,
+  fetchChatMessages,
+  fetchChats,
+  fetchCircles,
+  fetchDiscoverProfiles,
+  fetchMoments,
+  fetchStories,
+  markStoryViewed as markFirestoreStoryViewed,
+  updateUserProfiles,
+} from '../services/firebaseData';
 import { useAuth } from './useAuth';
 import { DataContext } from './DataContext';
-
-function asList(payload) {
-  if (Array.isArray(payload)) return payload;
-  for (const key of ['items', 'results', 'chats', 'messages', 'stories', 'circles', 'moments', 'users']) {
-    if (Array.isArray(payload?.[key])) return payload[key];
-  }
-  return [];
-}
 
 function readSavedMessages(userId) {
   try {
@@ -31,54 +36,77 @@ export function DataProvider({ children }) {
   const [moments, setMoments] = useState([]);
   const [users, setUsers] = useState([]);
   const [savedMessages, setSavedMessages] = useState(() => readSavedMessages(user?.id));
+  const [savedMessagesOwner, setSavedMessagesOwner] = useState(userId);
   const [activeCall, setActiveCall] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
   const [loading, setLoading] = useState({});
   const [errors, setErrors] = useState({});
   const toastTimeout = useRef(null);
+  const activeUserId = useRef(userId);
 
-  const load = useCallback(async (key, path, setter) => {
+  useEffect(() => {
+    activeUserId.current = userId;
+  }, [userId]);
+
+  const load = useCallback(async (key, loader, setter) => {
+    if (!userId) return;
+    const requestedUserId = userId;
     setLoading((current) => ({ ...current, [key]: true }));
     setErrors((current) => ({ ...current, [key]: '' }));
     try {
-      const payload = await api.get(path);
-      setter(asList(payload));
+      const result = await loader(userId);
+      if (activeUserId.current !== requestedUserId) return;
+      setter(result);
     } catch (error) {
+      if (activeUserId.current !== requestedUserId) return;
       setErrors((current) => ({ ...current, [key]: error.message }));
     } finally {
-      setLoading((current) => ({ ...current, [key]: false }));
+      if (activeUserId.current === requestedUserId) {
+        setLoading((current) => ({ ...current, [key]: false }));
+      }
     }
-  }, []);
+  }, [userId]);
 
-  const refreshChats = useCallback(() => load('chats', '/api/chats', setChats), [load]);
-  const refreshStories = useCallback(() => load('stories', '/api/stories', setStories), [load]);
-  const refreshCircles = useCallback(() => load('circles', '/api/circles', setCircles), [load]);
-  const refreshMoments = useCallback(() => load('moments', '/api/moments', setMoments), [load]);
-  const refreshUsers = useCallback(() => load('users', '/api/users/discover', setUsers), [load]);
+  const refreshChats = useCallback(() => load('chats', fetchChats, setChats), [load]);
+  const refreshStories = useCallback(() => load('stories', fetchStories, setStories), [load]);
+  const refreshCircles = useCallback(() => load('circles', fetchCircles, setCircles), [load]);
+  const refreshMoments = useCallback(() => load('moments', fetchMoments, setMoments), [load]);
+  const refreshUsers = useCallback(() => load('users', fetchDiscoverProfiles, setUsers), [load]);
   const refreshChatMessages = useCallback(async (chatId) => {
+    if (!userId) return [];
+    const requestedUserId = userId;
     const key = `messages:${chatId}`;
     setLoading((current) => ({ ...current, [key]: true }));
     setErrors((current) => ({ ...current, [`chat:${chatId}`]: '' }));
     try {
-      const payload = await api.get(`/api/chats/${encodeURIComponent(chatId)}/messages`);
-      const messages = asList(payload);
-      const liveState = Array.isArray(payload) ? {} : {
-        ...(payload?.typingUsers !== undefined ? { typingUsers: payload.typingUsers } : {}),
-      };
+      const messages = await fetchChatMessages(chatId);
+      if (activeUserId.current !== requestedUserId) return [];
       setChats((current) => current.map((chat) => (
-        chat.id === chatId ? { ...chat, ...liveState, messages } : chat
+        chat.id === chatId ? { ...chat, messages } : chat
       )));
       return messages;
     } catch (error) {
+      if (activeUserId.current !== requestedUserId) return [];
       setErrors((current) => ({ ...current, [`chat:${chatId}`]: error.message }));
       throw error;
     } finally {
-      setLoading((current) => ({ ...current, [key]: false }));
+      if (activeUserId.current === requestedUserId) {
+        setLoading((current) => ({ ...current, [key]: false }));
+      }
     }
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
-    if (!userId) return undefined;
+    if (!userId) {
+      setChats([]);
+      setStories([]);
+      setCircles([]);
+      setMoments([]);
+      setUsers([]);
+      setErrors({});
+      setLoading({});
+      return undefined;
+    }
     refreshChats();
     refreshStories();
     refreshCircles();
@@ -86,6 +114,11 @@ export function DataProvider({ children }) {
     refreshUsers();
     return undefined;
   }, [userId, refreshChats, refreshStories, refreshCircles, refreshMoments, refreshUsers]);
+
+  useEffect(() => {
+    setSavedMessages(readSavedMessages(userId));
+    setSavedMessagesOwner(userId);
+  }, [userId]);
 
   const chatIdsKey = chats.map((chat) => chat.id).join('|');
   useEffect(() => {
@@ -102,10 +135,10 @@ export function DataProvider({ children }) {
   }, [userId, chatIdsKey, refreshChatMessages]);
 
   useEffect(() => {
-    if (userId) {
+    if (userId && savedMessagesOwner === userId) {
       localStorage.setItem(`vibely_saved_messages_${userId}`, JSON.stringify(savedMessages));
     }
-  }, [userId, savedMessages]);
+  }, [userId, savedMessages, savedMessagesOwner]);
 
   useEffect(() => () => window.clearTimeout(toastTimeout.current), []);
 
@@ -116,22 +149,18 @@ export function DataProvider({ children }) {
   }, []);
 
   const sendMessage = useCallback(async (chatId, text, type = 'text', extra = {}) => {
-    const message = await api.post(`/api/chats/${encodeURIComponent(chatId)}/messages`, {
-      text,
-      type,
-      ...extra,
-    });
-    const savedMessage = message?.message ?? message;
-    if (!savedMessage?.id) throw new Error('The message response did not include a message ID.');
+    if (!user) throw new Error('You must be signed in to send messages.');
+    const savedMessage = await createChatMessage(chatId, user, text, type, extra);
     setChats((current) => current.map((chat) => (
       chat.id === chatId
         ? { ...chat, messages: [...(chat.messages || []), savedMessage] }
         : chat
     )));
     return savedMessage;
-  }, []);
+  }, [user]);
 
-  const addReaction = useCallback((chatId, messageId, emoji) => {
+  const addReaction = useCallback(async (chatId, messageId, emoji) => {
+    await addMessageReaction(chatId, messageId, emoji);
     setChats((current) => current.map((chat) => chat.id === chatId ? {
       ...chat,
       messages: (chat.messages || []).map((message) => message.id === messageId
@@ -148,7 +177,8 @@ export function DataProvider({ children }) {
     showToast(alreadySaved ? 'Removed from Saved Messages' : 'Saved to Starred Messages! ⭐');
   }, [savedMessages, showToast]);
 
-  const votePoll = useCallback((chatId, messageId, optionId) => {
+  const votePoll = useCallback(async (chatId, messageId, optionId) => {
+    await castPollVote(chatId, messageId, optionId);
     setChats((current) => current.map((chat) => chat.id === chatId ? {
       ...chat,
       messages: (chat.messages || []).map((message) => {
@@ -163,37 +193,37 @@ export function DataProvider({ children }) {
   }, [showToast]);
 
   const createCircle = useCallback(async (circle) => {
-    const result = await api.post('/api/circles', circle);
-    const created = result?.circle ?? result;
+    if (!userId) throw new Error('You must be signed in to create a circle.');
+    const created = await createFirestoreCircle(userId, { ...circle, color: 'bg-violet-600' });
     setCircles((current) => [...current, created]);
     showToast('New Circle created!');
-  }, [showToast]);
+  }, [userId, showToast]);
 
   const createStory = useCallback(async (story) => {
-    const result = await api.post('/api/stories', story);
-    const created = result?.story ?? result;
+    if (!user) throw new Error('You must be signed in to create a story.');
+    const created = await createFirestoreStory(user, story);
     setStories((current) => [created, ...current]);
     return created;
-  }, []);
+  }, [user]);
 
   const markStoryViewed = useCallback(async (storyId) => {
-    await api.post(`/api/stories/${encodeURIComponent(storyId)}/view`, {});
+    if (!userId) throw new Error('You must be signed in to view stories.');
+    await markFirestoreStoryViewed(storyId, userId);
     setStories((current) => current.map((story) => (
       story.id === storyId ? { ...story, isViewed: true } : story
     )));
-  }, []);
+  }, [userId]);
 
   const createMoment = useCallback(async (moment) => {
-    const result = await api.post('/api/moments', moment);
-    const created = result?.moment ?? result;
+    if (!user) throw new Error('You must be signed in to share a moment.');
+    const created = await createFirestoreMoment(user, moment);
     setMoments((current) => [created, ...current]);
     return created;
-  }, []);
+  }, [user]);
 
   const updateProfile = useCallback(async (profile) => {
     if (!user?.id) throw new Error('You must be signed in to update your profile.');
-    const nextUser = { ...user, ...profile };
-    await setDoc(doc(db, 'users', user.id), nextUser, { merge: true });
+    const nextUser = await updateUserProfiles(user, profile);
     setUser(nextUser);
     return nextUser;
   }, [user, setUser]);

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Shield, Bell, ChevronLeft, Lock, Sliders, Image as ImageIcon } from 'lucide-react';
 import { useAuth } from '../contexts/useAuth';
 import { useData } from '../contexts/useData';
-import { uploadToCloudinary } from '../services/cloudinary';
+import { uploadMedia } from '../services/storage';
 
 export const SettingsView = () => {
   const { user } = useAuth();
@@ -20,7 +20,7 @@ export const SettingsView = () => {
     setSaveError('');
     setSaved(false);
     try {
-      const avatar = avatarFile ? await uploadToCloudinary(avatarFile, 'image') : user?.avatar;
+      const avatar = avatarFile ? await uploadMedia(avatarFile) : user?.avatar;
       await updateProfile({ bio, vibe, avatar });
       setAvatarFile(null);
       setSaved(true);

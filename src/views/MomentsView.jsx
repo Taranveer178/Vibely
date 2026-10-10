@@ -3,7 +3,7 @@ import { Image as ImageIcon, MessageCircle, Heart, Plus, X } from 'lucide-react'
 import { useData } from '../contexts/useData';
 import { Avatar } from '../components/ui/Avatar';
 import { FetchState } from '../components/ui/FetchState';
-import { uploadToCloudinary } from '../services/cloudinary';
+import { uploadMedia } from '../services/storage';
 
 export const MomentsView = () => {
   const { moments, circles, loading, errors, refreshMoments, createMoment, showToast } = useData();
@@ -22,7 +22,7 @@ export const MomentsView = () => {
     setIsSubmitting(true);
     setSubmitError('');
     try {
-      const image = await uploadToCloudinary(selectedImage, 'image');
+      const image = await uploadMedia(selectedImage);
       await createMoment({
         image,
         title: form.get('title'),

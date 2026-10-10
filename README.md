@@ -1,43 +1,21 @@
 # Vibely
 
-Vibely is a React/Vite client for the Vibely Cloudflare Worker API. The UI is split into contexts, reusable components, layouts, views, and service modules under `src/`.
+Vibely is a React/Vite client backed directly by Firebase Authentication, Cloud Firestore, and Cloud Storage. The UI is split into contexts, reusable components, layouts, views, and service modules under `src/`.
 
 ## Local setup
 
-1. Set `VITE_API_BASE_URL` to your Worker origin when you want to use Worker-backed features. Configure the Cloudinary cloud name and upload presets for media uploads.
+1. Copy `.env.example` to `.env.local` and configure the Firebase Web API key from the Firebase Console for the `vibely-1d289` project (**Project settings → General → Your apps → SDK setup and configuration**).
 2. Install dependencies with `npm install`.
 3. Run `npm run dev`. `npm run build` and `npm run lint` validate the client.
 
-`VITE_API_BASE_URL` is the Worker origin (for example, `https://vibely-api.example.workers.dev`), without a trailing slash or `/api` suffix. The API client appends route paths and sends the signed-in Firebase user's ID token as a Bearer token. Firebase Authentication handles local registration/login directly, so account creation does not require a Worker URL.
+Firebase Authentication handles registration and login; Firestore stores profiles, chats, stories, circles, moments, and connection requests, and Firebase Storage stores uploaded media. There is no separate `VITE_API_BASE_URL` or Worker API requirement. Deploy the included `firestore.rules` and `storage.rules` in the Firebase Console before using database-backed features and uploads. Admin screens require an existing admin role on the user's `users/{uid}` document; do not grant admin access from client code. The admin dashboard shows account and recent-activity counts; transcript and report totals remain unavailable until those features write corresponding data. If Firebase reports `auth/api-key-not-valid`, verify the key is copied from the Web app configuration for this same Firebase project and check that its Google Cloud API-key restrictions allow the app's domains and the Identity Toolkit API.
 
-The Firebase app configuration is in `firebase.js`. Enable the **Email/Password** provider in Firebase Authentication. Registration creates a Firebase Auth account and saves its profile to the Firestore `users/{uid}` document; configure Firestore rules to permit an authenticated user to read/write their own profile.
+Enable the **Email/Password** provider in Firebase Authentication. Registration creates a Firebase Auth account and saves private and discoverable profile documents. Make sure the Firebase Storage bucket is enabled.
 
-## Worker API contract used by this client
+## Local testing
 
-The app expects JSON responses; list requests can return an array directly or an object containing `data`, `items`, `results`, or a matching collection key. Mutations should return the created/updated entity (or an object containing it). Errors should use a non-2xx status and a JSON `message` or `error`.
-
-| Method | Route | Purpose |
-| --- | --- | --- |
-| GET | `/api/chats` | List chats and their participants |
-| GET | `/api/chats/:id/messages` | Fetch a chat's messages and optional `typingUsers`; polled every five seconds |
-| POST | `/api/chats/:id/messages` | Send text or voice messages (`text`, `type`, `audioUrl`) |
-| GET / POST | `/api/stories` | List stories / create a story with uploaded `image`, `caption`, and `vibe` |
-| POST | `/api/stories/:id/view` | Mark a story as viewed |
-| GET / POST | `/api/circles` | List / create circles (`name`, `description`) |
-| GET / POST | `/api/moments` | List / create moments (`image`, `title`, `location`, optional `circleId`) |
-| GET | `/api/users/discover` | List users available for discovery |
-| POST | `/api/connections` | Send a connection request (`userId`) |
-| PATCH | `/api/users/profile` | Update the current user's `bio`, `vibe`, and `avatar` |
-| GET | `/api/admin/analytics` | Return `totalAccounts`, `activeToday`, `transcriptsProcessed`, and `pendingReports` |
-| GET | `/api/admin/users` | List accounts for the admin dashboard |
-| POST | `/api/admin/users/:id/suspend` | Suspend the selected account |
-
-The Worker must validate Firebase ID tokens, enforce authorization for protected and admin routes, validate input, and apply appropriate CORS rules. Message polling reads server state, including message delivery/read status and optional `typingUsers`, returned by the Worker. The client does not assume a WebSocket protocol because this repository contains no Worker or socket contract.
-
-## Cloudinary
-
-`uploadToCloudinary` sends media to the Cloudinary upload API before the related API mutation. Configure an unsigned, restricted upload preset (optionally separate image/audio presets) for browser uploads. Audio blobs use Cloudinary's `video` resource endpoint. Do not put Cloudinary API secrets or signing secrets in `VITE_*` variables; signed uploads require a signature generated by the Worker, which is not part of this repository's API contract.
+Create a Firestore database and deploy `firestore.rules`; deploy `storage.rules` if testing profile photos, stories, moments, or voice uploads. New user profiles are written to `users/{uid}` (private) and `profiles/{uid}` (discoverable). Stories, circles, moments, and connection requests are created by their respective screens. To test chat messaging, create a `chats/{chatId}` document with a `participants` array containing the participating Firebase UIDs; messages are written under its `messages` subcollection. Set an admin user's `role` to `admin` in the Firebase Console; client code cannot grant admin privileges.
 
 ## Client state
 
-The theme is stored in `localStorage`. Firebase Authentication persists the session and restores it on app boot. Saved-message IDs/content are persisted in account-scoped browser storage because no saved-message endpoint is defined by the Worker contract above.
+The theme is stored in `localStorage`. Firebase Authentication persists the session and restores it on app boot. Saved-message IDs/content are persisted in account-scoped browser storage.

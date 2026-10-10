@@ -1,15 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Users, Activity, Sparkles, ShieldAlert } from 'lucide-react';
 import { Avatar } from '../components/ui/Avatar';
-import { api } from '../services/api';
 import { FetchState } from '../components/ui/FetchState';
-
-function fetchAdminData() {
-  return Promise.all([
-    api.get('/api/admin/analytics'),
-    api.get('/api/admin/users'),
-  ]);
-}
+import { fetchAdminDashboardData, suspendUser as suspendFirestoreUser } from '../services/firebaseData';
 
 export const AdminDashboardView = () => {
   const [users, setUsers] = useState([]);
@@ -22,10 +15,9 @@ export const AdminDashboardView = () => {
     setLoading(true);
     setError('');
     try {
-      const [analyticsResult, usersResult] = await fetchAdminData();
-      setAnalytics(analyticsResult || {});
-      const userList = Array.isArray(usersResult) ? usersResult : usersResult?.items || [];
-      setUsers(userList);
+      const result = await fetchAdminDashboardData();
+      setAnalytics(result.analytics);
+      setUsers(result.users);
     } catch (requestError) {
       setError(requestError.message);
     } finally {
@@ -37,10 +29,9 @@ export const AdminDashboardView = () => {
     setPendingUserId(userId);
     setError('');
     try {
-      const result = await api.post(`/api/admin/users/${encodeURIComponent(userId)}/suspend`, {});
-      const updatedUser = result?.user ?? result;
+      await suspendFirestoreUser(userId);
       setUsers((current) => current.map((item) => (
-        item.id === userId ? { ...item, ...updatedUser, status: updatedUser.status || 'suspended' } : item
+        item.id === userId ? { ...item, status: 'suspended' } : item
       )));
     } catch (requestError) {
       setError(requestError.message);
@@ -51,11 +42,11 @@ export const AdminDashboardView = () => {
 
   useEffect(() => {
     let active = true;
-    fetchAdminData()
-      .then(([analyticsResult, usersResult]) => {
+    fetchAdminDashboardData()
+      .then((result) => {
         if (!active) return;
-        setAnalytics(analyticsResult || {});
-        setUsers(Array.isArray(usersResult) ? usersResult : usersResult?.items || []);
+        setAnalytics(result.analytics);
+        setUsers(result.users);
       })
       .catch((requestError) => {
         if (active) setError(requestError.message);

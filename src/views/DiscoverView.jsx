@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { useData } from '../contexts/useData';
+import { useAuth } from '../contexts/useAuth';
 import { Avatar } from '../components/ui/Avatar';
 import { FetchState } from '../components/ui/FetchState';
-import { api } from '../services/api';
+import { sendConnectionRequest as createConnectionRequest } from '../services/firebaseData';
 
 export const DiscoverView = () => {
+  const { user } = useAuth();
   const { users, showToast, loading, errors, refreshUsers } = useData();
   const [requestError, setRequestError] = useState('');
   const [pendingUserId, setPendingUserId] = useState(null);
@@ -13,7 +15,7 @@ export const DiscoverView = () => {
     setPendingUserId(targetUser.id);
     setRequestError('');
     try {
-      await api.post('/api/connections', { userId: targetUser.id });
+      await createConnectionRequest(user.id, targetUser.id);
       showToast(`Connection request sent to ${targetUser.name}!`);
     } catch (error) {
       setRequestError(error.message);

@@ -5,7 +5,7 @@ import { useData } from '../contexts/useData';
 import { RouterContext } from '../contexts/RouterContext';
 import { Avatar } from '../components/ui/Avatar';
 import { FetchState } from '../components/ui/FetchState';
-import { uploadToCloudinary } from '../services/cloudinary';
+import { uploadMedia } from '../services/storage';
 
 export const StoriesView = () => {
   const { user } = useAuth();
@@ -42,7 +42,7 @@ export const StoriesView = () => {
     setIsSubmitting(true);
     setSubmitError('');
     try {
-      const image = await uploadToCloudinary(imageFile, 'image');
+      const image = await uploadMedia(imageFile);
       const created = await createStory({
         image,
         caption: form.get('caption'),

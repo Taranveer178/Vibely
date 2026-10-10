@@ -6,7 +6,7 @@ import { useData } from '../contexts/useData';
 import { Avatar } from '../components/ui/Avatar';
 import { IconButton } from '../components/ui/IconButton';
 import { FetchState } from '../components/ui/FetchState';
-import { uploadToCloudinary } from '../services/cloudinary';
+import { uploadMedia } from '../services/storage';
 
 export const ChatView = () => {
   const { chats, users, loading, errors, refreshChats, refreshChatMessages, sendMessage, addReaction, toggleSaveMessage, votePoll, setActiveCall, showToast } = useData();
@@ -73,7 +73,7 @@ export const ChatView = () => {
         try {
           const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
           if (!blob.size) throw new Error('No audio was captured.');
-          const audioUrl = await uploadToCloudinary(blob, 'audio');
+          const audioUrl = await uploadMedia(blob, 'audio');
           await sendMessage(activeChat.id, '', 'voice', { audioUrl });
           showToast('Voice message sent! 🎙️');
         } catch (error) {
@@ -295,7 +295,7 @@ export const ChatView = () => {
                                 return (
                                   <div 
                                     key={opt.id}
-                                    onClick={() => votePoll(activeChat.id, msg.id, opt.id)}
+                                    onClick={() => votePoll(activeChat.id, msg.id, opt.id).catch((error) => showToast(error.message))}
                                     className="relative p-2.5 rounded-2xl bg-slate-100 dark:bg-slate-900 cursor-pointer overflow-hidden text-slate-900 dark:text-white"
                                   >
                                     <div className="absolute left-0 top-0 bottom-0 bg-violet-500/20 transition-all" style={{ width: `${percent}%` }}></div>
@@ -341,8 +341,8 @@ export const ChatView = () => {
 
                       {/* Action icons on hover */}
                       <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity px-1">
-                        <button onClick={() => addReaction(activeChat.id, msg.id, '❤️')} className="text-xs hover:scale-125 transition-transform">❤️</button>
-                        <button onClick={() => addReaction(activeChat.id, msg.id, '🔥')} className="text-xs hover:scale-125 transition-transform">🔥</button>
+                        <button onClick={() => addReaction(activeChat.id, msg.id, '❤️').catch((error) => showToast(error.message))} className="text-xs hover:scale-125 transition-transform">❤️</button>
+                        <button onClick={() => addReaction(activeChat.id, msg.id, '🔥').catch((error) => showToast(error.message))} className="text-xs hover:scale-125 transition-transform">🔥</button>
                         <button onClick={() => toggleSaveMessage(msg)} className="text-xs text-slate-400 hover:text-amber-400">⭐</button>
                       </div>
 
